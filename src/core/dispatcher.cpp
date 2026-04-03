@@ -1,5 +1,6 @@
 #include "core/dispatcher.hpp"
 #include "core/externalCommands.hpp"
+#include "core/handlePipe.hpp"
 #include "core/shellContext.hpp"
 #include "utils/getInternMap.hpp"
 #include "utils/hasPipe.hpp"
@@ -12,6 +13,7 @@ int dispatcher(const std::vector<std::string> &tokens, ShellContext &ctx) {
     return 0;
   }
   if (hasPipe(tokens)) {
+    handlePipe(tokens, ctx);
   }
 
   const auto &InternMap = getInternMap();
