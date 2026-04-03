@@ -1,9 +1,9 @@
 #include "core/dispatcher.hpp"
-#include "core/externalCommands.hpp"
-#include "core/handlePipe.hpp"
 #include "core/shellContext.hpp"
+#include "execution/externalCommands.hpp"
+#include "execution/handlePipe.hpp"
+#include "execution/hasPipe.hpp"
 #include "utils/getInternMap.hpp"
-#include "utils/hasPipe.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>

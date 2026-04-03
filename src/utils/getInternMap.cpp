@@ -1,8 +1,8 @@
 #include "utils/getInternMap.hpp"
-#include "built-ins/builtCd.hpp"
-#include "built-ins/builtExit.hpp"
-#include "built-ins/builtHistory.hpp"
 #include "core/shellContext.hpp"
+#include "execution/built-ins/builtCd.hpp"
+#include "execution/built-ins/builtExit.hpp"
+#include "execution/built-ins/builtHistory.hpp"
 #include <functional>
 #include <string>
 #include <string_view>

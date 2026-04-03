@@ -7,20 +7,41 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(MiniShell)
 
-target_sources(MiniShell PRIVATE
-  src/main.cpp
-  src/core/shell.cpp
-  src/core/tokenize.cpp
+set(CORE_SRC 
   src/core/dispatcher.cpp
-  src/core/externalCommands.cpp
-  src/built-ins/builtCd.cpp
-  src/built-ins/builtExit.cpp
-  src/built-ins/builtHistory.cpp
+  src/core/shell.cpp
+)
+
+set(EXEC_SRC
+    src/execution/handlePipe.cpp
+    src/execution/externalCommands.cpp
+    src/execution/hasPipe.cpp
+)
+
+set(BUILTIN_SRC
+    src/execution/built-ins/builtCd.cpp
+    src/execution/built-ins/builtExit.cpp
+    src/execution/built-ins/builtHistory.cpp
+)
+
+set(PARSER_SRC
+    src/parser/tokenize.cpp
+)
+
+set(UTILS_SRC
   src/utils/getInternMap.cpp
   src/utils/history.cpp
   src/utils/historyGlobal.cpp
   src/utils/printCwd.cpp
-  src/utils/hasPipe.cpp
+)
+
+target_sources(MiniShell PRIVATE
+    src/main.cpp
+    ${CORE_SRC}
+    ${EXEC_SRC}
+    ${BUILTIN_SRC}
+    ${PARSER_SRC}
+    ${UTILS_SRC}
 )
 
 target_include_directories(MiniShell PRIVATE include)

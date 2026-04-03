@@ -1,7 +1,7 @@
 #include "core/shell.hpp"
 #include "core/dispatcher.hpp"
 #include "core/shellContext.hpp"
-#include "core/tokenize.hpp"
+#include "parser/tokenize.hpp"
 #include "utils/history.hpp"
 #include "utils/historyGlobal.hpp"
 #include "utils/printCwd.hpp"

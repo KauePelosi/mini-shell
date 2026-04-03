@@ -1,3 +1,4 @@
+#include "execution/hasPipe.hpp"
 #include <string>
 #include <vector>
 
