@@ -1,4 +1,3 @@
-
 # MiniShell
 
 A **minimal Unix-like shell written in C++**, developed as a **personal portfolio project**. MiniShell focuses on demonstrating strong fundamentals in **operating systems**, **process management**, **command execution**, and **clean, extensible C++ design**.
@@ -364,7 +363,7 @@ After building the project using CMake, you can run MiniShell from the `bin` dir
 
 ## License
 
-Personal project developed for educational and portfolio purposes.
+Personal project developed for educational and portfolio purposes, using the MIT license.
 
 ---
 
@@ -378,9 +377,3 @@ Personal project developed for educational and portfolio purposes.
 *   Low-level system calls (`fork`, `exec`, `pipe`, `dup2`, `waitpid`, `chdir`)
 *   STL containers and algorithms
 *   Modular and extensible design
-
----
-
-## References
-
-No external references were used for this document, as it is based on internal project documentation and code. All information is derived from the provided context.
