@@ -14,7 +14,7 @@ set(CORE_SRC
 
 set(EXEC_SRC
   src/execution/pipelineCommands.cpp
-    src/execution/externalCommands.cpp
+  src/execution/externalCommands.cpp
 )
 
 set(BUILTIN_SRC
@@ -33,7 +33,7 @@ set(UTILS_SRC
   src/utils/history.cpp
   src/utils/historyGlobal.cpp
   src/utils/printCwd.cpp
-  src/execution/hasPipe.cpp
+  src/utils/hasPipe.cpp
 )
 
 target_sources(MiniShell PRIVATE
