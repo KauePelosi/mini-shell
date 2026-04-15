@@ -1,7 +1,10 @@
 #include "core/shell.hpp"
 #include "core/dispatcher.hpp"
 #include "core/shellContext.hpp"
-#include "core/tokenize.hpp"
+#include "execution/pipelineCommands.hpp"
+#include "parser/pipeParser.hpp"
+#include "parser/tokenize.hpp"
+#include "utils/hasPipe.hpp"
 #include "utils/history.hpp"
 #include "utils/historyGlobal.hpp"
 #include "utils/printCwd.hpp"
@@ -24,8 +27,18 @@ void shell(ShellContext &ctx) {
     }
     history.add(input);
     auto tokens = tokenize(input);
-    if (!tokens.empty()) {
-      ctx.lastExitStatus = dispatcher(tokens, ctx);
+
+    if (hasPipe(tokens)) {
+      std::vector<std::vector<std::string>> pipeCommands = pipeParser(tokens);
+      if (!pipeCommands.empty() && pipeCommands.size() > 1) {
+        ctx.lastExitStatus = pipelineCommands(pipeCommands);
+      } else if (!pipeCommands.empty()) {
+        ctx.lastExitStatus = dispatcher(pipeCommands[0], ctx);
+      }
+    } else {
+      if (!tokens.empty()) {
+        ctx.lastExitStatus = dispatcher(tokens, ctx);
+      }
     }
   }
 }

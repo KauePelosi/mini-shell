@@ -14,21 +14,25 @@ This project is intentionally scoped: it is not meant to replace Bash or Zsh, bu
 *   Command input via `std::getline`
 *   Custom **tokenizer** with support for single and double quotes
 *   Execution of external commands using:
-
     *   `fork()`
     *   `execvp()`
     *   `waitpid()`
 *   Built-in command system with dynamic dispatch
 *   Implemented built-ins:
-
     *   `cd` (defaults to `$HOME`)
     *   `exit [status]`
+    *   `history` (in-memory)
+*   Return status of the last executed command (`$?`)
+*   Basic pipeline parsing (`|`)
 *   Clear separation between:
-
     *   internal commands (built-ins)
     *   external system commands
 *   Modular project structure (`src/` / `include/`)
 *   Fully functional compiled binary
+
+### In Progress
+
+*   **Pipeline execution with multiple processes:** The core logic for creating processes and pipes is being developed to enable full pipeline functionality.
 
 ---
 
@@ -43,6 +47,8 @@ User Input
    ↓
 Tokenization
    ↓
+Pipeline Parsing (if '|' present)
+   ↓
 Dispatcher
    ├─ Built-in command
    └─ External command (fork + exec)
@@ -51,6 +57,93 @@ Dispatcher
 ### Built-in Dispatching
 
 Built-ins are registered in an `unordered_map`, allowing new commands to be added **without modifying the dispatcher logic**.
+
+---
+
+## Pipeline Implementation Details
+
+### Overview
+
+This update introduces initial support for **command pipelines** using the pipe operator (`|`). A pipeline allows multiple commands to be connected so that the output of one becomes the input of the next.
+
+**Example:**
+
+```bash
+ls -l | grep cpp | wc -l
+```
+
+### Motivation
+
+Previously, the shell only supported executing a **single command at a time**. However, real shells support chaining commands through pipes, which requires:
+
+*   **Multiple processes:** Each command in a pipeline typically runs in its own process.
+*   **Inter-process communication (IPC):** A mechanism to transfer data (output) from one process to another (input).
+*   **Coordinated execution:** Managing the lifecycle and communication between these processes.
+
+This change introduces the foundation for that behavior.
+
+### Design Decision
+
+Instead of modifying the existing execution logic, a new layer was introduced:
+
+```text
+tokens → pipeline parsing → execution
+```
+
+This keeps the architecture clean and avoids breaking existing functionality.
+
+### Parsing Strategy
+
+The tokenizer remains mostly unchanged. Input like `ls -l | grep cpp | wc -l` is tokenized as:
+
+```cpp
+["ls", "-l", "|", "grep", "cpp", "|", "wc", "-l"]
+```
+
+A new step, `pipeParser`, splits these tokens into commands:
+
+```cpp
+[
+  ["ls", "-l"],
+  ["grep", "cpp"],
+  ["wc", "-l"]
+]
+```
+
+### Execution Strategy (Under Development)
+
+For a pipeline with `N` commands:
+
+*   `N` processes are created (`fork()`)
+*   `N-1` pipes are created (`pipe()`)
+*   File descriptors are redirected using `dup2()`
+
+Each process:
+
+*   Reads from the previous command (if not first)
+*   Writes to the next command (if not last)
+
+### Key System Calls
+
+*   **`pipe()`:** Creates a unidirectional communication channel (`fd[0]` → read end, `fd[1]` → write end).
+*   **`fork()`:** Creates a child process (returns `0` in child, child PID in parent).
+*   **`dup2()`:** Redirects standard streams (`STDIN_FILENO`, `STDOUT_FILENO`).
+*   **`exec*()`:** Replaces the current process with a new program.
+
+### Integration
+
+The `shell` function now checks for pipes after tokenization:
+
+```cpp
+auto tokens = tokenize(input);
+
+if (hasPipe(tokens)) {
+  std::vector<std::vector<std::string>> pipeCommands = pipeParser(tokens);
+  // pipelineCommands(pipeCommands, ctx); // Placeholder for execution
+} else if (!tokens.empty()) {
+  ctx.lastExitStatus = dispatcher(tokens, ctx);
+}
+```
 
 ---
 
@@ -86,8 +179,7 @@ This command defines the project's name and specifies the programming languages 
 
 #### Targets
 
-In CMake, a 
-target is any artifact that CMake is configured to build. This can include executables, libraries, or other custom outputs.
+In CMake, a target is any artifact that CMake is configured to build. This can include executables, libraries, or other custom outputs.
 
 **Examples:**
 *   **Executable Target:** `add_executable(MiniShell)`
@@ -101,9 +193,21 @@ Source files are explicitly linked to a target, informing CMake which files are 
 
 ```cmake
 target_sources(MiniShell PRIVATE
-  src/main.cpp
-  src/core/shell.cpp
-  src/core/tokenize.cpp
+    src/main.cpp
+    src/core/dispatcher.cpp
+    src/core/shell.cpp
+    src/execution/pipelineCommands.cpp
+    src/execution/externalCommands.cpp
+    src/execution/built-ins/builtCd.cpp
+    src/execution/built-ins/builtExit.cpp
+    src/execution/built-ins/builtHistory.cpp
+    src/parser/tokenize.cpp
+    src/parser/pipeParser.cpp
+    src/utils/getInternMap.cpp
+    src/utils/history.cpp
+    src/utils/historyGlobal.cpp
+    src/utils/printCwd.cpp
+    src/utils/hasPipe.cpp
 )
 ```
 
@@ -131,9 +235,9 @@ Compiler warnings and flags are applied to specific targets to enforce coding st
 
 ```cmake
 target_compile_options(MiniShell PRIVATE
-  -Wall
-  -Wextra
-  -pedantic
+    -Wall
+    -Wextra
+    -pedantic
 )
 ```
 
@@ -180,111 +284,13 @@ cmake --build build
 
 #### 3. Clean Rebuild
 
-If the build becomes corrupted or inconsistent, a clean rebuild can resolve issues by removing all generated build artifacts and reconfiguring from scratch:
+To perform a clean rebuild, you can remove the `build` directory and then re-configure and build:
 
 ```sh
 rm -rf build
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ```
-
-### `clangd` Integration
-
-Language Servers like `clangd` rely on the `compile_commands.json` file to accurately understand include paths, compiler flags, and other project-specific settings. This enables features like intelligent autocompletion, diagnostics, and refactoring.
-
-After configuring your project with CMake, it's recommended to create a symbolic link to `compile_commands.json` in the project root:
-
-```sh
-ln -sf build/compile_commands.json .
-```
-
-# Generate the compile_commands.json:
-```
-cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-```
-
-This ensures that `clangd` (or any other tool looking for this file in the project root) can easily locate it, preventing false 
-errors related to 
-false include errors and improving the overall development experience.
-
-### Output Binary
-
-If the `RUNTIME_OUTPUT_DIRECTORY` property is set in CMake, the final executable will be placed in a specified directory. For example:
-
-```cmake
-set_target_properties(MiniShell PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin"
-)
-```
-
-With this configuration, the compiled executable will be found at:
-
-```
-bin/MiniShell
-```
-
-### Design Philosophy
-
-*   All configuration is **target-based**, ensuring modularity and clarity.
-*   **No relative includes (`../`)** are used in source files; header paths reflect the `include/` directory structure for better maintainability.
-*   The project structure is designed for **future expansion**, accommodating additional libraries, tests, and tools.
-
----
-
-## Project Structure
-
-```
-MiniShell/
-├── bin/            # Compiled executable output
-├── build/          # CMake build artifacts
-├── include/        # Public header files
-│   ├── built-ins/  # Headers for built-in commands
-│   │   ├── builtCd.hpp
-│   │   ├── builtExit.hpp
-│   │   └── builtHistory.hpp
-│   ├── core/       # Core shell component headers
-│   │   ├── dispatcher.hpp
-│   │   ├── externalCommands.hpp
-│   │   ├── shell.hpp
-│   │   └── tokenize.hpp
-│   ├── utils/      # Utility function headers
-│   │   ├── getInternMap.hpp
-│   │   ├── history.hpp
-│   │   ├── historyGlobal.hpp
-│   │   └── printCwd.hpp
-│   └── config.hpp  # Global configuration header
-├── src/            # Source code files
-│   ├── built-ins/  # Source for built-in commands
-│   │   ├── builtCd.cpp
-│   │   ├── builtExit.cpp
-│   │   └── builtHistory.cpp
-│   ├── core/       # Core shell component sources
-│   │   ├── dispatcher.cpp
-│   │   ├── externalCommands.cpp
-│   │   ├── shell.cpp
-│   │   └── tokenize.cpp
-│   ├── utils/      # Utility function sources
-│   │   ├── getInternMap.cpp
-│   │   ├── history.cpp
-│   │   ├── historyGlobal.cpp
-│   │   └── printCwd.cpp
-│   └── main.cpp    # Main application entry point
-├── CMakeLists.txt  # CMake build configuration
-├── compile_commands.json -> build/compile_commands.json # Symlink for Language Servers
-└── README.md       # Project README file
-```
-
----
-
-## Technologies and Concepts
-
-*   Modern C++ (C++17 / C++20)
-*   Unix/Linux system programming
-*   Process creation and management
-*   File system navigation
-*   Low-level system calls
-*   STL containers and algorithms
-*   Modular and extensible design
 
 ---
 
@@ -294,7 +300,7 @@ The following roadmap is organized by **impact and technical depth**, with portf
 
 ### High Priority (Core Shell Features)
 
-*   [ ] Pipe support (`|`)
+*   [x] Pipe support (`|`) - *Parsing implemented, execution in progress*
 *   [ ] Input/output redirection (`>`, `>>`, `<`)
 *   [ ] Proper signal handling (`SIGINT`, Ctrl+C)
 *   [x] Return status of the last executed command (`$?`)
@@ -310,7 +316,7 @@ The following roadmap is organized by **impact and technical depth**, with portf
 
 ### Advanced / High-Value Enhancements
 
-*   [ ] Pipeline execution with multiple processes
+*   [x] Pipeline execution with multiple processes - *Under development*
 *   [ ] Job control basics (`fg`, `bg`, `jobs`)
 *   [ ] Background execution (`&`)
 *   [ ] Logical operators (`&&`, `||`)
@@ -339,6 +345,8 @@ MiniShell exists to:
 
 ## How to Run
 
+After building the project using CMake, you can run MiniShell from the `bin` directory:
+
 ```bash
 ./bin/MiniShell
 ```
@@ -348,11 +356,24 @@ MiniShell exists to:
 ## Project Status
 
 *   Stable core with clean architecture
-*   Missing classic shell features by design (planned)
-*   Strong foundation for incremental evolution
+*   Pipeline parsing implemented, execution actively being developed.
+*   Strong foundation for incremental evolution and addition of classic shell features.
 
 ---
 
 ## License
 
-Personal project developed for educational and portfolio purposes.
+Personal project developed for educational and portfolio purposes, using the MIT license.
+
+---
+
+## Technologies and Concepts
+
+*   Modern C++ (C++17 / C++20)
+*   Unix/Linux system programming
+*   Process creation and management
+*   Inter-process communication (IPC) via pipes
+*   File system navigation
+*   Low-level system calls (`fork`, `exec`, `pipe`, `dup2`, `waitpid`, `chdir`)
+*   STL containers and algorithms
+*   Modular and extensible design
