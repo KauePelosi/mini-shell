@@ -23,10 +23,11 @@ This project is intentionally scoped: it is not meant to replace Bash or Zsh, bu
   - `exit [status]`
   - `history` (in-memory)
 - Return status of the last executed command (`$?`)
-- Basic pipeline parsing (`|`)
+- Pipe support (`|`)
 - Clear separation between:
   - internal commands (built-ins)
   - external system commands
+  - pipe commands
 - Modular project structure (`src/` / `include/`)
 - Fully functional compiled binary
 
@@ -40,14 +41,19 @@ The project is designed to be **simple to follow**, while remaining **easy to ex
 
 ```
 User Input
-   ↓
-Tokenization
-   ↓
-Pipeline Parsing (if '|' present)
-   ↓
-Dispatcher
-   ├─ Built-in command
-   └─ External command (fork + exec)
+↓
+Tokenize
+↓
+hasPipe(tokens)?
+│
+├─ yes → pipeParser(tokens)
+│              ↓
+│         pipelineCommands()
+│         [fork + pipe + dup2 + exec × N]
+│
+└─ no  → dispatcher(tokens)
+├─ Built-in  (cd, exit, history)
+└─ External  (fork + exec)
 ```
 
 ### Built-in Dispatching
@@ -100,13 +106,13 @@ A new step, `pipeParser`, splits these tokens into commands:
 
 ```cpp
 [
-  ["ls", "-l"],
-  ["grep", "cpp"],
-  ["wc", "-l"]
+["ls", "-l"],
+["grep", "cpp"],
+["wc", "-l"]
 ]
 ```
 
-### Execution Strategy (Under Development)
+### Execution Strategy
 
 For a pipeline with `N` commands:
 
@@ -135,9 +141,15 @@ auto tokens = tokenize(input);
 
 if (hasPipe(tokens)) {
   std::vector<std::vector<std::string>> pipeCommands = pipeParser(tokens);
-  // pipelineCommands(pipeCommands, ctx); // Placeholder for execution
-} else if (!tokens.empty()) {
-  ctx.lastExitStatus = dispatcher(tokens, ctx);
+  if (!pipeCommands.empty() && pipeCommands.size() > 1) {
+    ctx.lastExitStatus = pipelineCommands(pipeCommands);
+  } else if (!pipeCommands.empty()) {
+    ctx.lastExitStatus = dispatcher(pipeCommands[0], ctx);
+  }
+} else {
+  if (!tokens.empty()) {
+    ctx.lastExitStatus = dispatcher(tokens, ctx);
+  }
 }
 ```
 
@@ -153,13 +165,13 @@ CMake is primarily responsible for **generating build files** (such as `Makefile
 
 ```
 CMakeLists.txt
-      ↓
+↓
 cmake -B build
-      ↓
+↓
 Build System Files (Makefile / Ninja)
-      ↓
+↓
 cmake --build build
-      ↓
+↓
 MiniShell Executable
 ```
 
@@ -189,22 +201,42 @@ All build configurations, such as source files, compile options, and link librar
 Source files are explicitly linked to a target, informing CMake which files are part of a particular build artifact:
 
 ```cmake
-target_sources(MiniShell PRIVATE
-    src/main.cpp
-    src/core/dispatcher.cpp
-    src/core/shell.cpp
-    src/execution/pipelineCommands.cpp
-    src/execution/externalCommands.cpp
+set(CORE_SRC 
+  src/core/dispatcher.cpp
+  src/core/shell.cpp
+)
+
+set(EXEC_SRC
+  src/execution/pipelineCommands.cpp
+  src/execution/externalCommands.cpp
+)
+
+set(BUILTIN_SRC
     src/execution/built-ins/builtCd.cpp
     src/execution/built-ins/builtExit.cpp
     src/execution/built-ins/builtHistory.cpp
+)
+
+set(PARSER_SRC
     src/parser/tokenize.cpp
     src/parser/pipeParser.cpp
-    src/utils/getInternMap.cpp
-    src/utils/history.cpp
-    src/utils/historyGlobal.cpp
-    src/utils/printCwd.cpp
-    src/utils/hasPipe.cpp
+)
+
+set(UTILS_SRC
+  src/utils/getInternMap.cpp
+  src/utils/history.cpp
+  src/utils/historyGlobal.cpp
+  src/utils/printCwd.cpp
+  src/utils/hasPipe.cpp
+)
+
+target_sources(MiniShell PRIVATE
+    src/main.cpp
+    ${CORE_SRC}
+    ${EXEC_SRC}
+    ${BUILTIN_SRC}
+    ${PARSER_SRC}
+    ${UTILS_SRC}
 )
 ```
 
@@ -232,9 +264,9 @@ Compiler warnings and flags are applied to specific targets to enforce coding st
 
 ```cmake
 target_compile_options(MiniShell PRIVATE
-    -Wall
-    -Wextra
-    -pedantic
+-Wall
+-Wextra
+-pedantic
 )
 ```
 
@@ -297,7 +329,7 @@ cmake --build build
 
 The following roadmap is organized by **impact and technical depth**, with portfolio value in mind.
 
-### High Priority (Core Shell Features)
+### Core Shell Features
 
 - [x] Pipe support (`|`)
 - [ ] Input/output redirection (`>`, `>>`, `<`)
@@ -305,40 +337,40 @@ The following roadmap is organized by **impact and technical depth**, with portf
 - [x] Return status of the last executed command (`$?`)
 - [x] Command history (in-memory)
 
-### Medium Priority (Shell Behavior and Usability)
-
-- [ ] Environment variable expansion (`$VAR`)
-- [ ] Built-in `export` and `unset`
-- [ ] Tilde expansion (`~`)
-- [ ] Improved parser (state machine or simple AST)
-- [ ] Error messages closer to real shells
-
-### Advanced / High-Value Enhancements
-
-- [x] Pipeline execution with multiple processes - _Under development_
-- [ ] Job control basics (`fg`, `bg`, `jobs`)
-- [ ] Background execution (`&`)
-- [ ] Logical operators (`&&`, `||`)
-- [ ] Subshell execution (`(command)`)
-
-### Low Priority (Polish and Portfolio Extras)
-
-- [ ] Config file support (`.minishellrc`)
-- [ ] Customizable prompt
-- [ ] Debug / verbose mode
-- [ ] Automated tests
-- [ ] Simple performance benchmarks
-
 ---
 
 ## Goals of the Project
 
-MiniShell exists to:
+MiniShell demonstrates, in its current state:
 
-- Demonstrate solid understanding of **Unix internals**
-- Show clean, maintainable **C++ system-level code**
-- Highlight architectural thinking, not just features
-- Serve as a strong **portfolio project** for systems / backend roles
+### Complete pipeline execution
+
+Supports chaining multiple commands with `|` using `fork()`, `pipe()`, `dup2()`, and `waitpid()`. Each command runs in its own process, with standard input/output correctly redirected between stages.
+
+### Clean built-in command dispatch
+
+Built-ins (`cd`, `exit`, `history`) are registered in an `unordered_map`, allowing new commands to be added without touching the dispatcher logic.
+
+### Tokenization with quote handling
+
+Properly respects single and double quotes, treating quoted strings as single tokens (e.g., `echo "hello world"`).
+
+### Command history
+
+In-memory history with persistent storage (`~/.minishell_history`) and a `history` built-in to view it.
+
+### Exit status tracking
+
+`$?`-like behavior via `ctx.lastExitStatus`, displayed in the prompt with coloured ✓ (success) / ✗ (failure).
+
+### Modular C++ design
+
+Clear separation of parsing, execution, built-ins, and utilities. Modern CMake build system with target-based configuration, explicit source lists, and strict compiler warnings (`-Wall -Wextra -pedantic`).
+
+
+### Unix system programming fluency
+
+Direct use of low-level syscalls (`fork`, `execvp`, `pipe`, `dup2`, `chdir`, `waitpid`) without higher-level wrappers, proving solid understanding of process creation, IPC, and file descriptor manipulation.
 
 ---
 
@@ -351,15 +383,6 @@ After building the project using CMake, you can run MiniShell from the `bin` dir
 ```
 
 ---
-
-## Project Status
-
-- Stable core with clean architecture
-- Pipeline parsing implemented, execution actively being developed.
-- Strong foundation for incremental evolution and addition of classic shell features.
-
----
-
 ## License
 
 Personal project developed for educational and portfolio purposes, using the MIT license.
