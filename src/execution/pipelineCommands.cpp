@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+#include <signal.h>
 
 int pipelineCommands(
     const std::vector<std::vector<std::string>> &pipeCommands) {
@@ -41,6 +42,7 @@ int pipelineCommands(
     }
 
     if (pids[i] == 0) {
+      signal(SIGINT, SIG_DFL);
       if (i > 0) {
         if (dup2(pipes[i - 1][0], STDIN_FILENO) == -1) {
           std::cerr << shellName << ": failed to redirect STDIN - "
@@ -51,7 +53,7 @@ int pipelineCommands(
 
       if (i < pipeNumber) {
         if (dup2(pipes[i][1], STDOUT_FILENO) == -1) {
-          std::cerr << shellName << ": failed to redirect STDOOUT - "
+          std::cerr << shellName << ": failed to redirect STDOUT - "
                     << std::strerror(errno) << std::endl;
           _exit(1);
         }

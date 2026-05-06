@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <vector>
 #include <fcntl.h>
+#include "signal.h"
 
 std::vector<char *> getRedirectionArgs(const std::vector<std::string> &tokens) {
   std::vector<char *> cleanArgs;
@@ -57,6 +58,7 @@ int externalCommands(const std::vector<std::string> &tokens) {
     }
 
     if (pid == 0) {
+      signal(SIGINT, SIG_DFL);
         std::vector<char *> finalArgs;
 
         if (hasRedirection(tokens)) {
