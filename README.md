@@ -332,7 +332,7 @@ The following roadmap is organized by **impact and technical depth**, with portf
 ### Core Shell Features
 
 - [x] Pipe support (`|`)
-- [ ] Input/output redirection (`>`, `>>`, `<`)
+- [x] Input/output redirection (`>`)
 - [ ] Proper signal handling (`SIGINT`, Ctrl+C)
 - [x] Return status of the last executed command (`$?`)
 - [x] Command history (in-memory)
