@@ -78,6 +78,12 @@ int externalCommands(const std::vector<std::string> &tokens) {
     } 
     int status;
     waitpid(pid, &status, 0);
+    if (WIFSIGNALED(status)) {
+      if (WTERMSIG(status) == SIGINT) {
+        std::cout << std::endl;
+      }
+    }
+
     if (WIFEXITED(status)) {
         return WEXITSTATUS(status);
     }
